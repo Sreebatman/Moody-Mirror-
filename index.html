@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moody Mirror - Useless Project</title>
+    <meta name="description" content="A useless AI mirror that judges your appearance - TinkerHub Hackathon Project">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
+    <style>
+        :root {
+            --mirror-frame: #2c3e50;
+            --mirror-glass: rgba(255, 255, 255, 0.1);
+            --roast-text: #e74c3c;
+            --highlight: #f39c12;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            color: white;
+        }
+        
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        header {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            color: var(--highlight);
+            text-shadow: 0 0 10px rgba(243, 156, 18, 0.5);
+        }
+        
+        .tagline {
+            font-size: 1.2rem;
+            opacity: 0.8;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .mirror-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .mirror-frame {
+            flex: 1;
+            min-width: 300px;
+            background: var(--mirror-frame);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .mirror-glass {
+            background: var(--mirror-glass);
+            border-radius: 15px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        #video-container {
+            position: relative;
+            width: 100%;
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #video {
+            width: 100%;
+            max-height: 60vh;
+            display: block;
+            transform: scaleX(-1);
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        .roast-display {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 1.4rem;
+            color: var(--roast-text);
+            font-weight: bold;
+            border: 2px solid rgba(231, 76, 60, 0.3);
+        }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            padding: 20px 0;
+            justify-content: center;
+        }
+        
+        button {
+            background: linear-gradient(to right, #e74c3c, #f39c12);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 1.1rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        .stats {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 15px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--highlight);
+            margin: 5px 0;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        
+        .info-panel {
+            flex: 1;
+            min-width: 300px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+        }
+        
+        .info-section {
+            margin-bottom: 25px;
+        }
+        
+        h2 {
+            color: var(--highlight);
+            margin-bottom: 15px;
+            font-size: 1.8rem;
+        }
+        
+        h3 {
+            color: var(--roast-text);
+            margin: 15px 0 10px;
+        }
+        
+        ul {
+            padding-left: 20px;
+            margin-bottom: 15px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        
+        .roast-log {
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 10px;
+            border-radius: 10px;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+        
+        .roast-entry {
+            padding: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .roast-entry:last-child {
+            border-bottom: none;
+        }
+        
+        .karma-meter {
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            margin: 15px 0;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .karma-fill {
+            height: 100%;
+            background: linear-gradient(to right, #e74c3c, #f39c12);
+            width: 30%;
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+        
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .tech-item {
+            background: rgba(52, 152, 219, 0.2);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            .mirror-container {
+                flex-direction: column;
+            }
+            
+            h1 {
+                font-size: 2.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Moody Mirror</h1>
+            <p class="tagline">The world's most useless AI mirror - because your self-esteem needed a challenge</p>
+        </header>
+        
+        <div class="mirror-container">
+            <div class="mirror-frame">
+                <div class="mirror-glass">
+                    <div id="video-container">
+                        <video id="video" autoplay playsinline></video>
+                        <canvas id="canvas"></canvas>
+                    </div>
+                    <div class="roast-display" id="roast-display">
+                        Allow camera access to experience the judgment...
+                    </div>
+                </div>
+                
+                <div class="controls">
+                    <button id="start-btn">Start Mirror</button>
+                    <button id="roast-btn">Roast Me!</button>
+                    <button id="karma-btn">Karma Mode</button>
+                    <button id="share-btn">Share Shame</button>
+                </div>
+                
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="roast-count">0</div>
+                        <div class="stat-label">Savage Roasts Delivered</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="karma-level">30%</div>
+                        <div class="stat-label">Karma Level</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="cringe-score">0</div>
+                        <div class="stat-label">Cringe Score</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="info-panel">
+                <div class="info-section">
+                    <h2>How It Judges You</h2>
+                    <p>Moody Mirror uses AI to analyze:</p>
+                    <ul>
+                        <li>Your facial expressions (even the ones you're hiding)</li>
+                        <li>Dominant colors in your outfit (and judges your fashion choices)</li>
+                        <li>Your posture (because slouching is so last season)</li>
+                        <li>Your reaction to previous roasts (yes, it's learning)</li>
+                    </ul>
+                </div>
+                
+                <div class="info-section">
+                    <h2>Roast Log</h2>
+                    <div class="roast-log" id="roast-log"></div>
+                </div>
+                
+                <div class="info-section">
+                    <h2>Karma Meter</h2>
+                    <p>After 5 roasts, unlock Karma Mode for fake compliments!</p>
+                    <div class="karma-meter">
+                        <div class="karma-fill" id="karma-fill"></div>
+                    </div>
+                </div>
+                
+                <div class="info-section">
+                    <h2>Tech Stack</h2>
+                    <div class="tech-stack">
+                        <div class="tech-item">TensorFlow.js</div>
+                        <div class="tech-item">Blazeface Model</div>
+                        <div class="tech-item">Web Speech API</div>
+                        <div class="tech-item">Canvas API</div>
+                        <div class="tech-item">CSS Magic</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const roastDisplay = document.getElementById('roast-display');
+        const roastLog = document.getElementById('roast-log');
+        const startBtn = document.getElementById('start-btn');
+        const roastBtn = document.getElementById('roast-btn');
+        const karmaBtn = document.getElementById('karma-btn');
+        const shareBtn = document.getElementById('share-btn');
+        const roastCount = document.getElementById('roast-count');
+        const karmaLevel = document.getElementById('karma-level');
+        const karmaFill = document.getElementById('karma-fill');
+        const cringeScore = document.getElementById('cringe-score');
+        
+        // State variables
+        let isRunning = false;
+        let roastCounter = 0;
+        let karmaMode = false;
+        let currentExpression = 'neutral';
+        let currentColor = 'black';
+        let currentPosture = 'average';
+        let lastRoastTime = 0;
+        
+        // Roast database - categorized by expression, color, and posture
+        const roasts = {
+            expression: {
+                happy: [
+                    "Someone's happy... did you find a penny?",
+                    "Smiling? Must be faking it.",
+                    "That grin? My circuits are cringing.",
+                    "Cheer up! Or don't, I'm just a mirror."
+                ],
+                sad: [
+                    "Why so glum? Did your dog leave you too?",
+                    "Cheer up! Or don't, I'm a mirror.",
+                    "That frown belongs in a modern art museum.",
+                    "Did you see your bank balance again?"
+                ],
+                angry: [
+                    "Whoa, who stole your coffee?",
+                    "Angry? You look like a tomato with a bad haircut.",
+                    "Rage looks good on you... said no one ever.",
+                    "Calm down, it's not like I'm judging you... oh wait."
+                ],
+                surprised: [
+                    "Surprised? Did you see your own outfit?",
+                    "Eyes wide open? You must have seen my electricity bill.",
+                    "What? Did you forget to wear pants again?",
+                    "Surprise! You still look like that."
+                ],
+                neutral: [
+                    "No expression? Did you run out of emotions?",
+                    "Blank stare? Did you forget to pay your brain bill?",
+                    "Resting mirror face, I see.",
+                    "Wow, you really woke up and chose 'meh'."
+                ]
+            },
+            color: {
+                red: [
+                    "Red? Trying to stand out? It's not working.",
+                    "Red is the color of passion... and clowns."
+                ],
+                blue: [
+                    "Blue? Feeling depressed? It shows.",
+                    "Blue shirt? Did you get dressed in the dark?"
+                ],
+                green: [
+                    "Green? Trying to blend in with the grass?",
+                    "Green? You look like a garden gnome."
+                ],
+                yellow: [
+                    "Yellow? You look like a walking banana.",
+                    "Yellow? Did the sun throw up on you?"
+                ],
+                black: [
+                    "Black? Going to a funeral? Oh, it's just your style.",
+                    "Black? How original."
+                ],
+                white: [
+                    "White? Bold choice for someone who spills coffee.",
+                    "White? You must hate yourself."
+                ],
+                pattern: [
+                    "Patterns? My eyes hurt.",
+                    "Did a clown throw up on you?"
+                ]
+            },
+            posture: [
+                "Standing like that? You look like a question mark.",
+                "Posture check: Failed.",
+                "Sit up straight! Oh wait, I don't care.",
+                "Are you trying to become a hunchback?",
+                "Your posture is as bad as your fashion sense."
+            ],
+            karma: [
+                "Your face... it's almost human!",
+                "I'd say you clean up nice, but let's not lie.",
+                "That outfit? It's... a choice.",
+                "You look... presentable. For once.",
+                "Is that confidence? Or just bad lighting?",
+                "10/10 would mirror again (maybe)."
+            ]
+        };
+        
+        // Initialize
+        startBtn.addEventListener('click', toggleMirror);
+        roastBtn.addEventListener('click', forceRoast);
+        karmaBtn.addEventListener('click', toggleKarmaMode);
+        shareBtn.addEventListener('click', shareRoast);
+        
+        // Toggle mirror function
+        async function toggleMirror() {
+            if (!isRunning) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { 
+                            facingMode: "user", 
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        } 
+                    });
+                    video.srcObject = stream;
+                    video.onloadedmetadata = () => {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                    };
+                    
+                    isRunning = true;
+                    startBtn.textContent = 'Stop Mirror';
+                    roastDisplay.textContent = 'Analyzing your questionable life choices...';
+                    
+                    // Start detection loop
+                    detectLoop();
+                } catch (err) {
+                    roastDisplay.textContent = 'Camera access denied. Coward.';
+                    console.error('Error accessing camera:', err);
+                }
+            } else {
+                if (video.srcObject) {
+                    video.srcObject.getTracks().forEach(track => track.stop());
+                    video.srcObject = null;
+                }
+                isRunning = false;
+                startBtn.textContent = 'Start Mirror';
+                roastDisplay.textContent = 'Mirror stopped. Your ego is safe for now.';
+            }
+        }
+        
+        // Main detection loop
+        async function detectLoop() {
+            if (!isRunning) return;
+            
+            try {
+                // Draw video to canvas
+                ctx.save();
+                ctx.scale(-1, 1);
+                ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+                ctx.restore();
+                
+                // Mock detection for demo purposes
+                // In a real implementation, we would use TensorFlow.js models here
+                const expressions = Object.keys(roasts.expression);
+                currentExpression = expressions[Math.floor(Math.random() * expressions.length)];
+                
+                const colors = Object.keys(roasts.color);
+                currentColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                currentPosture = 'slouching';
+                
+                // Draw mock detection results
+                drawDetectionUI();
+                
+                // Auto-roast every 10 seconds
+                const now = Date.now();
+                if (now - lastRoastTime > 10000) {
+                    generateRoast();
+                    lastRoastTime = now;
+                }
+                
+                // Continue loop
+                setTimeout(detectLoop, 100);
+            } catch (err) {
+                console.error('Detection error:', err);
+                setTimeout(detectLoop, 1000);
+            }
+        }
+        
+        // Draw detection UI elements
+        function drawDetectionUI() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw face bounding box
+            ctx.strokeStyle = '#e74c3c';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(canvas.width/2 - 100, canvas.height/2 - 100, 200, 200);
+            
+            // Draw expression text
+            ctx.fillStyle = '#e74c3c';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Expression: ${currentExpression}`, canvas.width/2, 40);
+            
+            // Draw posture indicator
+            ctx.beginPath();
+            ctx.moveTo(canvas.width/2, canvas.height/2 + 120);
+            ctx.lineTo(canvas.width/2, canvas.height/2 + 200);
+            ctx.stroke();
+            
+            // Draw color swatch
+            ctx.fillStyle = getColorValue(currentColor);
+            ctx.fillRect(canvas.width - 120, 20, 100, 30);
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Arial';
+            ctx.fillText(currentColor, canvas.width - 70, 40);
+            
+            // Draw emotion emoji
+            const emoji = getEmojiForExpression(currentExpression);
+            ctx.font = '60px Arial';
+            ctx.fillText(emoji, canvas.width/2, canvas.height/2 - 120);
+        }
+        
+        // Get emoji for expression
+        function getEmojiForExpression(expression) {
+            const emojis = {
+                happy: '😊',
+                sad: '😢',
+                angry: '😠',
+                surprised: '😲',
+                neutral: '😐'
+            };
+            return emojis[expression] || '🤔';
+        }
+        
+        // Get color value for display
+        function getColorValue(colorName) {
+            const colors = {
+                red: '#e74c3c',
+                blue: '#3498db',
+                green: '#2ecc71',
+                yellow: '#f1c40f',
+                black: '#2c3e50',
+                white: '#ecf0f1',
+                pattern: '#9b59b6'
+            };
+            return colors[colorName] || '#95a5a6';
+        }
+        
+        // Generate a roast
+        function generateRoast() {
+            if (!isRunning) return;
+            
+            roastCounter++;
+            roastCount.textContent = roastCounter;
+            
+            let roast;
+            
+            if (karmaMode && roastCounter > 5) {
+                // Karma mode - "nice" roasts
+                const karmaRoasts = roasts.karma;
+                roast = karmaRoasts[Math.floor(Math.random() * karmaRoasts.length)];
+            } else {
+                // Choose roast category
+                const categories = ['expression', 'color', 'posture'];
+                const category = categories[Math.floor(Math.random() * categories.length)];
+                
+                if (category === 'expression') {
+                    const expressionRoasts = roasts.expression[currentExpression];
+                    roast = expressionRoasts[Math.floor(Math.random() * expressionRoasts.length)];
+                } else if (category === 'color') {
+                    const colorRoasts = roasts.color[currentColor];
+                    roast = colorRoasts[Math.floor(Math.random() * colorRoasts.length)];
+                } else {
+                    roast = roasts.posture[Math.floor(Math.random() * roasts.posture.length)];
+                }
+            }
+            
+            // Update display
+            roastDisplay.textContent = roast;
+            
+            // Speak the roast
+            speakRoast(roast);
+            
+            // Add to log
+            const logEntry = document.createElement('div');
+            logEntry.className = 'roast-entry';
+            logEntry.textContent = roast;
+            roastLog.prepend(logEntry);
+            
+            // Keep log manageable
+            if (roastLog.children.length > 10) {
+                roastLog.removeChild(roastLog.lastChild);
+            }
+            
+            // Update karma meter
+            updateKarmaMeter();
+            
+            // Update cringe score
+            const newScore = Math.min(100, Math.floor(roastCounter * 3.5));
+            cringeScore.textContent = newScore;
+        }
+        
+        // Force a roast
+        function forceRoast() {
+            if (isRunning) {
+                generateRoast();
+            } else {
+                roastDisplay.textContent = "Start the mirror first, you impatient human!";
+            }
+        }
+        
+        // Speak the roast
+        function speakRoast(text) {
+            if ('speechSynthesis' in window) {
+                const speech = new SpeechSynthesisUtterance(text);
+                speech.rate = 0.9;
+                speech.pitch = 1.2;
+                speech.volume = 1;
+                window.speechSynthesis.speak(speech);
+            }
+        }
+        
+        // Toggle karma mode
+        function toggleKarmaMode() {
+            karmaMode = !karmaMode;
+            karmaBtn.textContent = karmaMode ? 'Disable Karma' : 'Karma Mode';
+            roastDisplay.textContent = karmaMode ? 
+                "Karma mode enabled. Prepare for fake compliments!" : 
+                "Karma mode disabled. Brutal honesty restored!";
+        }
+        
+        // Update karma meter
+        function updateKarmaMeter() {
+            const karma = Math.min(100, Math.floor(roastCounter * 10));
+            karmaLevel.textContent = `${karma}%`;
+            karmaFill.style.width = `${karma}%`;
+        }
+        
+        // Share roast
+        function shareRoast() {
+            if (roastDisplay.textContent && roastDisplay.textContent !== 'Allow camera access to experience the judgment...') {
+                if (navigator.share) {
+                    navigator.share({
+                        title: "Moody Mirror Roasted Me",
+                        text: `My Moody Mirror roast: "${roastDisplay.textContent}" - Try it yourself!`,
+                        url: window.location.href
+                    }).catch(console.error);
+                } else {
+                    alert(`Share this roast: "${roastDisplay.textContent}"\n\nTry Moody Mirror yourself!`);
+                }
+            } else {
+                roastDisplay.textContent = "Get roasted first, then share the shame!";
+            }
+        }
+        
+        // Initial karma meter setup
+        updateKarmaMeter();
+    </script>
+</body>
+</html>
